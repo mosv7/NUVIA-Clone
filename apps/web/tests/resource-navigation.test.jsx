@@ -1,11 +1,72 @@
 import React from 'react';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { useResource } from '../src/features/product/useResource.js';
 import { productApi } from '../src/features/product/api.js';
-import { resetApiSession, setApiWorkspace } from '../src/lib/http/client.js';
+import { apiRequest, resetApiSession, setApiWorkspace } from '../src/lib/http/client.js';
 
 beforeEach(() => resetApiSession());
+afterEach(() => vi.useRealTimers());
+it.each(['/workspaces/new/select', '/workspaces', '/team/accept'])(
+  'waits for refreshed session scope before reloading resources after %s',
+  async (mutationPath) => {
+    let selected = 'old';
+    const reads = [],
+      expired = vi.fn();
+    window.addEventListener('nuvia:session-expired', expired);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+      const path = String(url).replace('/api/v1', '');
+      let data,
+        status = 200;
+      if (path === '/auth/session') data = { csrfToken: 'test-csrf', workspace: { id: selected } };
+      else if (path === mutationPath) {
+        selected = 'new';
+        data = { workspace: { id: selected } };
+      } else {
+        reads.push(options.headers['X-Workspace-ID']);
+        if (options.headers['X-Workspace-ID'] && options.headers['X-Workspace-ID'] !== selected) {
+          status = 409;
+          data = { error: { code: 'WORKSPACE_CHANGED' } };
+        } else data = { workspace: selected };
+      }
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    try {
+      await apiRequest('/auth/session');
+      const view = renderHook(() => useResource('/analytics'));
+      await waitFor(() => expect(view.result.current.data).toEqual({ workspace: 'old' }));
+      await act(async () => apiRequest(mutationPath, { method: 'POST', body: {} }));
+      expect(reads).toEqual(['old']);
+      expect(expired).not.toHaveBeenCalled();
+      await act(async () => apiRequest('/auth/session'));
+      await waitFor(() => expect(view.result.current.data).toEqual({ workspace: 'new' }));
+      expect(reads).toEqual(['old', 'new']);
+      expect(expired).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('nuvia:session-expired', expired);
+    }
+  },
+);
+it('polls at the first interval even when the previous response completed later than its start', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(100000);
+  const get = vi
+    .spyOn(productApi, 'get')
+    .mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ unreadCount: 1 }), 100)),
+    );
+  const view = renderHook(() => useResource('/account/notifications', { refreshInterval: 30000 }));
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  expect(view.result.current.data).toEqual({ unreadCount: 1 });
+  await act(async () => vi.advanceTimersByTimeAsync(29900));
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(view.result.current.loading).toBe(false);
+  await act(async () => vi.advanceTimersByTimeAsync(100));
+  view.unmount();
+});
 it('reuses data on navigation and deduplicates simultaneous readers', async () => {
   const get = vi.spyOn(productApi, 'get').mockResolvedValue({ total: 7 });
   const first = renderHook(() => useResource('/analytics'));

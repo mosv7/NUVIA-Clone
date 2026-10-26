@@ -103,6 +103,10 @@ Successful writes invalidate active resources. Session reset, workspace selectio
 and refreshed identity/branch permissions clear cached private results and cancel
 old reads. Results are never stored in local/session storage by this cache.
 Polled analytics and notification resources refresh while the document is visible.
+Workspace selection, business creation and invitation acceptance defer resource invalidation to their
+session refresh so no refetch uses the previously selected workspace header.
+Scheduled polling bypasses the navigation freshness window and still deduplicates
+in-flight reads, so response latency cannot skip the first refresh interval.
 
 Overview insight cards reuse saved report content only when locale, exact cohort
 filters and response count match. Owners/managers can generate a scoped report

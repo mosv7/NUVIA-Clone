@@ -203,6 +203,9 @@ export async function runProductBrowserScenario({ browser, origin, deps, output,
     await customer.getByRole('button', { name: 'Switch to Arabic' }).click();
     await shot(customer, 'public-survey-success-narrow-ar');
     await page.goto(origin + '/#/survey-all');
+    // Begin the navigation-cache assertion with a fresh session read after
+    // the independent customer browser has submitted its response.
+    await page.reload();
     await page.getByText('Approved survey journey', { exact: true }).waitFor();
     assert.equal(await page.getByText('Customer experience survey', { exact: true }).count(), 0);
     assert.equal(await page.getByText('Quick satisfaction check', { exact: true }).count(), 0);
@@ -217,16 +220,13 @@ export async function runProductBrowserScenario({ browser, origin, deps, output,
       results.requests.filter(
         (request) => request.path === '/api/v1/surveys' && request.method === 'GET',
       ).length;
-    const refreshedSurveys = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === '/api/v1/surveys' &&
-        response.request().method() === 'GET',
-    );
     await page.evaluate(() => {
       location.hash = '/feedbacks';
     });
     await page.getByRole('heading', { name: 'Feedbacks', exact: true }).waitFor();
-    await refreshedSurveys;
+    // The first visit may reuse a fresh result or revalidate an older one.
+    // Measure the subsequent navigation after either read has settled.
+    await page.waitForLoadState('networkidle');
     const beforeReads = surveyReads();
     await page.evaluate(() => {
       location.hash = '/survey-all';

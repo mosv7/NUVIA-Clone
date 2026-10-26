@@ -153,7 +153,7 @@ function ConnectedInsights({ dashboard, language, kind }) {
                   </div>
                 ))
               )}
-              <a href={'#/reports?id=' + encodeURIComponent(report.id)}>
+              <a href={'#/report-details?id=' + encodeURIComponent(report.id)}>
                 {t('View saved report and evidence', 'عرض التقرير المحفوظ والأدلة')}
               </a>
               {report.createdAt && (

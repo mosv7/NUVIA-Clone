@@ -93,7 +93,14 @@ export async function apiRequest(path, { method = 'GET', body, signal } = {}) {
     throw error;
   }
   if (version === epoch && data?.csrfToken) csrfToken = data.csrfToken;
-  if (version === epoch && method !== 'GET') invalidateResources();
+  // These callers refresh the session after the selected workspace changes.
+  // Refetching now would still send the previous X-Workspace-ID.
+  const changesWorkspace =
+    method === 'POST' &&
+    (path === '/workspaces' ||
+      /^\/workspaces\/[^/]+\/select$/.test(path) ||
+      path === '/team/accept');
+  if (version === epoch && method !== 'GET' && !changesWorkspace) invalidateResources();
   if (method !== 'GET' && path === '/auth/logout') resetApiSession();
   return data;
 }

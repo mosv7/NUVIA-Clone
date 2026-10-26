@@ -13,13 +13,14 @@ export function useResource(path, { refreshInterval = 0 } = {}) {
   const state = useSyncExternalStore(subscribe, snapshot);
   useEffect(() => {
     if (!entry) return;
-    const read = () => readResource(entry, (signal) => productApi.get(path, signal));
+    const read = (force = false) =>
+      readResource(entry, (signal) => productApi.get(path, signal), force);
     read();
     const timer =
       refreshInterval > 0
         ? setInterval(
             () => {
-              if (document.visibilityState === 'visible') read();
+              if (document.visibilityState === 'visible') read(true);
             },
             Math.max(refreshInterval, 30000),
           )

@@ -40,6 +40,9 @@ it('shows saved model summary and actionable report sections with evidence links
     </>,
   );
   expect(screen.getByText('Customers praised service.')).toBeVisible();
+  expect(
+    screen.getAllByRole('link', { name: 'View saved report and evidence' })[0],
+  ).toHaveAttribute('href', '#/report-details?id=saved');
   expect(screen.getByText('Review the delivery feedback.')).toBeVisible();
   expect(screen.getByRole('link', { name: 'Late delivery' })).toHaveAttribute(
     'href',

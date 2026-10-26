@@ -86,3 +86,6 @@ Set `NUVIA_QA_OUTPUT` to an absolute temporary directory to keep screenshots and
 QA results outside the repository. The scenario also checks continuous typing,
 empty-question recovery, AI unavailable states, unread badges, navigation caching
 and scoped overview report generation.
+The composed `run-product-browser.mjs` runner accepts the same output override.
+Its report-library assertions target saved report IDs and verify both locales,
+including the English report created by the earlier overview scenario.
