@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.schemas.tasks import TaskRequest, validate_result
@@ -116,3 +118,45 @@ def test_compact_survey_assigns_application_metadata_to_model_questions():
     assert len(result["questions"]) == 5
     assert result["questions"][0]["type"] == "long_text"
     assert result["questions"][0]["label"] == "Speed?"
+
+
+@pytest.mark.parametrize("label,locale", [("How was service?", "en"), ("كيف كانت الخدمة؟", "ar")])
+@pytest.mark.parametrize("padding", [" ", "\t\n", "\u00a0"])
+def test_survey_rejects_questions_that_are_duplicates_after_whitespace_cleanup(
+    label, locale, padding
+):
+    from app.providers.qwen_interfaces import run_interface
+
+    request = TaskRequest(schemaVersion=1, taskId="duplicate-question-regression", locale=locale)
+    output = json.dumps(
+        {
+            "title": "Service",
+            "description": "Feedback",
+            "questions": [
+                label,
+                f"{padding}{label}{padding}",
+                "Speed?",
+                "Quality?",
+                "Suggestions?",
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="Duplicate survey questions"):
+        run_interface("survey_generation", request, None, lambda *_: output)
+
+
+def test_survey_preserves_distinct_normalized_question_text():
+    from app.providers.qwen_interfaces import run_interface
+
+    request = TaskRequest(schemaVersion=1, taskId="normalized-questions", locale="en")
+    labels = ["Service?", "Speed?", "Quality?", "Staff?", "Suggestions?"]
+    output = json.dumps(
+        {
+            "title": "Service",
+            "description": "Feedback",
+            "questions": [f" \t{label}\n" for label in labels],
+        }
+    )
+    result = run_interface("survey_generation", request, None, lambda *_: output)
+    assert [question["label"] for question in result["questions"]] == labels
+    assert len({question["id"] for question in result["questions"]}) == len(labels)

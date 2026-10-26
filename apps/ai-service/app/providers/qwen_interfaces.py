@@ -1,8 +1,9 @@
 """Small-model interfaces: compact inputs, strict outputs, no guessed evidence."""
 
 import json
+from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from app.schemas.tasks import RESULT_MODELS, StrictModel
 
@@ -23,7 +24,9 @@ class GroundedSummary(StrictModel):
 class SurveyDraft(StrictModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(max_length=2000)
-    questions: list[str] = Field(min_length=5, max_length=10)
+    questions: list[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    ] = Field(min_length=5, max_length=10)
 
 
 def citations(ids, request):
