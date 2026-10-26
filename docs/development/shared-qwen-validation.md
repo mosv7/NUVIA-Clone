@@ -64,3 +64,19 @@ timeout/crash/cancellation recovery and shutdown errors. Configuration tests cov
 tampering, unsafe placement, malformed config, CUDA/memory readiness and locale
 restrictions. An independent read-only review found no unresolved important issue
 after fixes. See [setup and reproduction](../../apps/ai-service/docs/shared-qwen.md).
+
+## Review corrections before merge
+
+Question labels are now stripped with the same string constraints as their final
+public contract before duplicate detection. EN/AR regressions reject duplicates
+that differ only by surrounding spaces, tabs/newlines or nonbreaking spaces;
+distinct labels remain intact.
+
+Two pre-existing CI blockers were also addressed: model path resolution now
+supports the app-only Docker `/service` layout while retaining checkout-relative
+configuration, and the invitation browser scenario uses the active approved
+verification/dashboard text. Invitation token/session/membership and reload
+assertions remain unchanged. Local invitation and product browser checks passed
+with synthetic accounts and isolated replica sets. Local Docker execution was
+unavailable because its daemon was not running; the copied-app import regression
+covers the path failure, with the actual image check left to CI.
