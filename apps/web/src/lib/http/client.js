@@ -1,16 +1,23 @@
 import { API_PREFIX } from '@nuvia/shared-types';
+import { clearResources, invalidateResources } from './resource-cache.js';
 let csrfToken = null,
   apiWorkspaceId = null,
   pendingBootstrap = null,
+  apiAccessKey = null,
   epoch = 0;
 export function resetApiSession() {
+  clearResources();
   epoch++;
   csrfToken = null;
   apiWorkspaceId = null;
+  apiAccessKey = null;
   pendingBootstrap = null;
 }
-export function setApiWorkspace(id) {
+export function setApiWorkspace(id, accessKey) {
+  if (apiWorkspaceId !== (id || null) || (accessKey !== undefined && apiAccessKey !== accessKey))
+    clearResources();
   apiWorkspaceId = id || null;
+  if (accessKey !== undefined) apiAccessKey = accessKey;
 }
 const workspaceBoundPath = (path, method = 'GET') =>
   (/^\/(?:workspace(?:$|\/|\?)|workspaces\/[^/]+\/branches(?:$|\/|\?)|surveys(?:$|\/|\?)|survey-templates(?:$|\?)|feedback(?:$|\/|\?)|analytics(?:$|\?)|reports(?:$|\/|\?)|ai(?:$|\/|\?)|analysis(?:$|\/|\?)|assistant(?:$|\/|\?)|team(?:$|\/|\?)|business-page(?:$|\?)|billing(?:$|\/|\?)|actions(?:$|\/|\?)|search(?:$|\?))/.test(
@@ -86,6 +93,7 @@ export async function apiRequest(path, { method = 'GET', body, signal } = {}) {
     throw error;
   }
   if (version === epoch && data?.csrfToken) csrfToken = data.csrfToken;
+  if (version === epoch && method !== 'GET') invalidateResources();
   if (method !== 'GET' && path === '/auth/logout') resetApiSession();
   return data;
 }
