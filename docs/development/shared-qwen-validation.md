@@ -80,3 +80,12 @@ assertions remain unchanged. Local invitation and product browser checks passed
 with synthetic accounts and isolated replica sets. Local Docker execution was
 unavailable because its daemon was not running; the copied-app import regression
 covers the path failure, with the actual image check left to CI.
+
+CI subsequently exposed the fast 72-state visual matrix reaching the existing
+300-requests-per-user / 15-minute product limit after the functional checks.
+Only that isolated test runner now advances its injected API clock by one actual
+limiter window per independent locale/viewport batch. Production limits and the
+unexpected-429 assertion remain unchanged. The eight advances are recorded in
+test evidence and occur after functional authentication, token and permission
+checks. A direct limiter regression verifies request 301 remains blocked until
+the exact expiry boundary and that the renewed window still permits only 300.
