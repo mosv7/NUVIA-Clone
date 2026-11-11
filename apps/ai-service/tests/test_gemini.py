@@ -29,9 +29,22 @@ def test_explicit_cloud_selection_exposes_safe_readiness(configured):
     assert entries["normalization"]["modelVersion"] == "builtin-1"
     assert entries["normalization"]["pipelineVersion"] == "nuvia-ai-1"
     assert entries["normalization"]["provider"] == "local"
-    assert entries["forecasting"]["available"] is False
-    assert entries["clustering"]["available"] is False
+    assert entries["clustering"]["available"] is True
+    assert entries["clustering"]["provider"] == "gemini"
+    assert entries["clustering"]["modelVersion"].startswith("gemini/")
+    assert entries["forecasting"]["available"] is True
+    assert entries["forecasting"]["provider"] == "gemini"
+    assert entries["forecasting"]["modelVersion"].startswith("gemini/")
     assert "private-fixture-key" not in response.text
+
+
+def test_cloud_dataset_capabilities_missing_key_stay_unavailable(configured, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY")
+    response = request("GET", "/api/v1/capabilities", headers=configured)
+    entries = {item["capability"]: item for item in response.json()["capabilities"]}
+    for capability in ("clustering", "forecasting"):
+        assert entries[capability]["available"] is False
+        assert entries[capability]["reason"] == "provider_not_configured"
 
 
 def test_local_default_never_uses_key_without_explicit_selection(configured, monkeypatch):
@@ -93,7 +106,7 @@ def test_structured_sentiment_passes_real_contract_validation(configured, monkey
         json={"schemaVersion": 1, "taskId": "r1", "locale": "ar", "text": "جيد"},
     )
     assert response.status_code == 200
-    assert response.json()["pipelineVersion"] == "nuvia-gemini-json-4"
+    assert response.json()["pipelineVersion"] == "nuvia-gemini-json-5"
     assert response.json()["result"]["sentences"][0]["sentenceId"] == "s1"
     assert seen[0][0] == "generateContent"
     assert seen[0][1]["generationConfig"]["responseJsonSchema"]["type"] == "object"
@@ -241,6 +254,243 @@ def test_unverified_embedding_model_is_unavailable_without_disabling_text_tasks(
     assert entries["embeddings"]["available"] is False
     assert entries["embeddings"]["reason"] == "unsupported_embedding_model"
     assert entries["sentiment"]["available"] is True
+
+
+def test_cloud_clustering_partitions_evidence_text_without_remote_vectors(configured, monkeypatch):
+    seen = inline_http(
+        monkeypatch,
+        generated(
+            {
+                "clusters": [
+                    {
+                        "id": "c1",
+                        "label": "Service speed",
+                        "memberIds": ["a", "b"],
+                        "evidenceIds": ["a", "b"],
+                    },
+                    {
+                        "id": "c2",
+                        "label": "Food quality",
+                        "memberIds": ["c"],
+                        "evidenceIds": ["c"],
+                    },
+                ],
+                "noiseIds": [],
+            }
+        ),
+    )
+    response = request(
+        "POST",
+        "/api/v1/tasks/clustering",
+        headers=configured,
+        json={
+            "schemaVersion": 1,
+            "taskId": "r1",
+            "locale": "en",
+            "evidence": [
+                {"id": "a", "text": "Fast delivery."},
+                {"id": "b", "text": "Quick service."},
+                {"id": "c", "text": "Food was cold."},
+            ],
+            "parameters": {
+                "vectors": [
+                    {"id": "a", "values": [0.1, 0.2]},
+                    {"id": "b", "values": [0.3, 0.4]},
+                    {"id": "c", "values": [0.5, 0.6]},
+                ],
+                "sampleCount": 3,
+                "totalResponses": 3,
+            },
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert [cluster["id"] for cluster in result["clusters"]] == ["c1", "c2"]
+    assert result["clusters"][0]["memberIds"] == ["a", "b"]
+    assert result["noiseIds"] == []
+    assert seen[0][0] == "generateContent"
+    prompt = json.loads(seen[0][1]["contents"][0]["parts"][0]["text"])
+    assert "vectors" not in prompt["parameters"]
+    assert prompt["parameters"]["sampleCount"] == 3
+    assert prompt["evidence"] == [
+        {"id": "a", "text": "Fast delivery."},
+        {"id": "b", "text": "Quick service."},
+        {"id": "c", "text": "Food was cold."},
+    ]
+
+
+def test_cloud_clustering_requires_authorized_evidence(configured, monkeypatch):
+    seen = inline_http(monkeypatch, generated({"clusters": [], "noiseIds": []}))
+    response = request(
+        "POST",
+        "/api/v1/tasks/clustering",
+        headers=configured,
+        json={"schemaVersion": 1, "taskId": "r1", "locale": "en"},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "insufficient_evidence"
+    assert seen == []
+
+
+@pytest.mark.parametrize(
+    "clusters,noise",
+    [
+        ([{"id": "c1", "label": "Theme", "memberIds": ["a"], "evidenceIds": ["a"]}], []),
+        (
+            [{"id": "c1", "label": "Theme", "memberIds": ["a", "b"], "evidenceIds": ["a"]}],
+            ["b", "b"],
+        ),
+        (
+            [
+                {
+                    "id": "c1",
+                    "label": "Theme",
+                    "memberIds": ["a", "invented"],
+                    "evidenceIds": ["a", "invented"],
+                }
+            ],
+            [],
+        ),
+        (
+            [
+                {
+                    "id": "c1",
+                    "label": "Theme",
+                    "memberIds": ["a", "b"],
+                    "evidenceIds": ["a", "foreign"],
+                }
+            ],
+            [],
+        ),
+    ],
+    ids=["missing-member", "duplicate-noise", "invented-id", "foreign-evidence"],
+)
+def test_cloud_clustering_rejects_nonpartition_or_invented_output(
+    configured, monkeypatch, clusters, noise
+):
+    inline_http(monkeypatch, generated({"clusters": clusters, "noiseIds": noise}))
+    response = request(
+        "POST",
+        "/api/v1/tasks/clustering",
+        headers=configured,
+        json={
+            "schemaVersion": 1,
+            "taskId": "r1",
+            "locale": "en",
+            "evidence": [{"id": "a", "text": "One."}, {"id": "b", "text": "Two."}],
+        },
+    )
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "invalid_model_output"
+    assert "result" not in response.json()
+
+
+def test_cloud_forecasting_projects_exactly_the_supplied_dates(configured, monkeypatch):
+    observations = [
+        {"date": f"2026-01-{day:02d}", "value": 5.0 + day / 100} for day in range(1, 31)
+    ]
+    seen = inline_http(
+        monkeypatch,
+        generated(
+            {
+                "points": [
+                    {"date": "2026-02-01", "value": 5.5, "lower": 5.0, "upper": 6.0},
+                    {"date": "2026-02-02", "value": 5.6, "lower": 5.1, "upper": 6.1},
+                ],
+                "sampleCount": 30,
+                "uncertainty": "limited-history-projection",
+            }
+        ),
+    )
+    response = request(
+        "POST",
+        "/api/v1/tasks/forecasting",
+        headers=configured,
+        json={
+            "schemaVersion": 1,
+            "taskId": "r1",
+            "locale": "en",
+            "parameters": {
+                "observations": observations,
+                "futureDates": ["2026-02-01", "2026-02-02"],
+                "sampleCount": 30,
+                "interval": "day",
+                "metric": "weighted-mean-aspect-score",
+            },
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()["result"]
+    assert result["sampleCount"] == 30
+    assert [point["date"] for point in result["points"]] == ["2026-02-01", "2026-02-02"]
+    assert seen[0][0] == "generateContent"
+    prompt = json.loads(seen[0][1]["contents"][0]["parts"][0]["text"])
+    assert prompt["parameters"]["observations"] == observations
+    assert prompt["parameters"]["futureDates"] == ["2026-02-01", "2026-02-02"]
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {
+            "points": [
+                {"date": "2026-02-01", "value": 5.5},
+                {"date": "2026-02-03", "value": 5.6},
+            ],
+            "sampleCount": 30,
+        },
+        {"points": [{"date": "2026-02-01", "value": 5.5}], "sampleCount": 30},
+        {
+            "points": [
+                {"date": "2026-02-01", "value": 5.5},
+                {"date": "2026-02-02", "value": 12.0, "lower": 11.0, "upper": 13.0},
+            ],
+            "sampleCount": 30,
+        },
+        {
+            "points": [
+                {"date": "2026-02-01", "value": 5.5},
+                {"date": "2026-02-02", "value": 5.6, "lower": -1.0, "upper": 6.0},
+            ],
+            "sampleCount": 30,
+        },
+        {
+            "points": [
+                {"date": "2026-02-01", "value": 5.5},
+                {"date": "2026-02-02", "value": 5.6},
+            ],
+            "sampleCount": 29,
+        },
+    ],
+    ids=[
+        "wrong-date",
+        "missing-point",
+        "value-out-of-range",
+        "interval-out-of-range",
+        "sample-count",
+    ],
+)
+def test_cloud_forecasting_rejects_drifted_dates_ranges_or_counts(configured, monkeypatch, result):
+    inline_http(monkeypatch, generated(result))
+    response = request(
+        "POST",
+        "/api/v1/tasks/forecasting",
+        headers=configured,
+        json={
+            "schemaVersion": 1,
+            "taskId": "r1",
+            "locale": "en",
+            "parameters": {
+                "observations": [
+                    {"date": f"2026-01-{day:02d}", "value": 5.0} for day in range(1, 31)
+                ],
+                "futureDates": ["2026-02-01", "2026-02-02"],
+            },
+        },
+    )
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "invalid_model_output"
+    assert "result" not in response.json()
 
 
 def test_remote_schema_does_not_trigger_observed_maxitems_argument_rejection(
@@ -442,7 +692,17 @@ def test_provider_prompt_never_treats_platform_name_as_customer_business_identit
         assert "تقرير آراء العملاء" in prompt
 
 
-@pytest.mark.parametrize("capability", ["sentiment", "aspects", "assistant", "survey_generation"])
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "sentiment",
+        "aspects",
+        "assistant",
+        "survey_generation",
+        "clustering",
+        "forecasting",
+    ],
+)
 def test_generic_report_title_examples_do_not_leak_into_other_tasks(capability):
     from app.providers.gemini import GeminiConfig, instructions
     from app.schemas.tasks import TaskRequest
@@ -455,3 +715,31 @@ def test_generic_report_title_examples_do_not_leak_into_other_tasks(capability):
     assert "Never invent a business name" in prompt
     if capability == "survey_generation":
         assert "survey-specific title" in prompt
+
+
+def test_clustering_prompt_requires_exact_text_partition_with_localized_labels():
+    from app.providers.gemini import GeminiConfig, instructions
+    from app.schemas.tasks import TaskRequest
+
+    config = GeminiConfig(capability="clustering", key="fixture", model="fixture")
+    task = TaskRequest(schemaVersion=1, taskId="r1", locale="ar")
+    prompt = instructions(config, task)
+    assert "exactly once" in prompt
+    assert "memberIds" in prompt and "noiseIds" in prompt
+    assert "evidenceIds" in prompt
+    assert "invented" in prompt
+    assert "vectors" not in prompt
+
+
+def test_forecasting_prompt_limits_projection_to_supplied_dates_and_metric_range():
+    from app.providers.gemini import GeminiConfig, instructions
+    from app.schemas.tasks import TaskRequest
+
+    config = GeminiConfig(capability="forecasting", key="fixture", model="fixture")
+    task = TaskRequest(schemaVersion=1, taskId="r1", locale="en")
+    prompt = instructions(config, task)
+    assert "futureDates" in prompt
+    assert "sampleCount" in prompt
+    assert "0 to 10" in prompt
+    assert "lower" in prompt and "upper" in prompt
+    assert "do not invent" in prompt
