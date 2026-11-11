@@ -47,7 +47,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:backend
       - run: pnpm test:e2e:product
-      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright Chromium (retries transient runner network failures)
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "Playwright install attempt ${attempt} failed; retrying in 30s"
+            sleep 30
+          done
+          echo "Playwright install failed after 3 attempts"
+          exit 1
       - run: pnpm test:e2e:accounts
       - run: pnpm test:e2e:invitations
       - run: pnpm test:e2e:product:browser
