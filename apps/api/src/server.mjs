@@ -53,6 +53,5 @@ try {
     stack: error?.stack,
   });
 
-  // Let pending startup diagnostics flush before Node exits.
   process.exitCode = 1;
 }
