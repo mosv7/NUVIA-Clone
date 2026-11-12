@@ -18,8 +18,17 @@ from app.models.manifest import Taxonomy, bounded_env
 from app.schemas.tasks import RESULT_MODELS, TaskRequest, validate_result
 from app.services.runtime import ExecutionError, execute_isolated
 
-CAPABILITIES = ("sentiment", "aspects", "embeddings", "report", "assistant", "survey_generation")
-PIPELINE_VERSION = "nuvia-gemini-json-4"
+CAPABILITIES = (
+    "sentiment",
+    "aspects",
+    "embeddings",
+    "clustering",
+    "forecasting",
+    "report",
+    "assistant",
+    "survey_generation",
+)
+PIPELINE_VERSION = "nuvia-gemini-json-5"
 TAXONOMY = Taxonomy(
     version="nuvia-gemini-aspects-v1", labels=["staff", "timeliness", "quality", "value"]
 )
@@ -205,6 +214,21 @@ def instructions(config, request):
         "single_choice, multiple_choice, rating, nps. Choice questions need 2 to 30 unique "
         "options; omit options on all other types. Title max120 chars, description max2000, "
         "question label max500, each option max200. Draft only; requires human review.",
+        "clustering": "Group similar supplied evidence texts into 2 to 12 semantically "
+        "coherent feedback themes when they exist. Every supplied evidence id must appear "
+        "exactly once across cluster memberIds and noiseIds, with no invented, duplicated "
+        "or missing ids. Each cluster needs a unique short id like c1, a concise semantic "
+        "label in the task locale, and 1 to 5 representative evidenceIds drawn from its own "
+        "memberIds. Items that fit no shared theme belong in noiseIds. Labels summarize "
+        "member text only; do not invent counts, statistics or sources. Semantic grouping "
+        "from text replaces numeric vector clustering for this provider.",
+        "forecasting": "Project the supplied observation series onto exactly the supplied "
+        "futureDates, in the same order, using those exact dates only. Each point value is "
+        "the projected metric within 0 to 10, with optional lower and upper bounds where "
+        "0 to 10 covers lower <= value <= upper. sampleCount equals the number of supplied "
+        "observations. Use only supplied observations and dates; do not invent, reorder or "
+        "extend them. Describe honest limits in uncertainty, such as a limited-history "
+        "estimate; do not claim statistical confidence or causality.",
     }
     return common + specific[config.capability]
 
@@ -285,6 +309,12 @@ def run_task(config, request):
         payload = request.model_dump(exclude_none=True)
         # A provider needs the authorized task data, not Node's internal job identifier.
         payload.pop("taskId", None)
+        if config.capability == "clustering":
+            # Clustering runs on evidence text semantics; numeric embedding vectors are
+            # not readable model context and would only bloat the remote prompt.
+            payload["parameters"] = {
+                name: value for name, value in payload["parameters"].items() if name != "vectors"
+            }
         if config.capability == "aspects":
             payload["taxonomy"] = config.taxonomy.model_dump()
         response = post_json(

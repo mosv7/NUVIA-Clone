@@ -320,9 +320,18 @@ def validate_result(capability, value, request, manifest=None):
     if capability == "forecasting":
         if result.sampleCount != len(request.parameters.get("observations", [])):
             raise ValueError("Forecast observation count mismatch")
+        future = request.parameters.get("futureDates", [])
         dates = [point.date for point in result.points]
         if dates != sorted(set(dates)):
             raise ValueError("Forecast dates must be unique and ordered")
+        if dates != future:
+            raise ValueError("Forecast must project exactly the supplied future dates")
+        for point in result.points:
+            # The weighted-mean-aspect-score metric is bounded to [0, 10].
+            if not 0 <= point.value <= 10:
+                raise ValueError("Forecast value outside metric range")
+            if point.lower is not None and not 0 <= point.lower <= point.value <= point.upper <= 10:
+                raise ValueError("Forecast interval outside metric range")
     if capability == "survey_generation":
         if len({item.id for item in result.questions}) != len(result.questions):
             raise ValueError("Duplicate question ID")

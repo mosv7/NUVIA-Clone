@@ -49,10 +49,10 @@ The root development launcher loads private settings for its AI child; a standal
 invocation reads process environment, not the root `.env` file itself. Selecting `local` restores
 local model selection and never calls Gemini, even when a Gemini key remains configured.
 
-Gemini replaces selection for sentiment, aspects, embeddings, reports/cluster summaries,
-assistant and survey drafts only. Existing language/normalization and local clustering/forecasting
-remain available according to their existing registry. Clustering/forecasting still wait for
-compatible local packages if none is installed. No local adapter, manifest, artifact or Qwen
+Gemini replaces selection for sentiment, aspects, embeddings, clustering, forecasting,
+reports/cluster summaries, assistant and survey drafts — every learned capability. Existing
+language/normalization stay deterministic builtins. Local package paths remain intact and
+selectable via `AI_PROVIDER=local`/`qwen`; no local adapter, manifest, artifact or Qwen
 trial is removed, activated or downloaded. Invalid provider names disable learned execution;
 missing cloud configuration does not activate an installed local model as a fallback.
 
@@ -102,7 +102,17 @@ upstream full-token coverage. Longer-source acceptance requires separately verif
 counting/input behavior; no hidden chunks or partial batch embedding are created. Other
 tasks retain their existing complete raw input/evidence limits.
 
-Cloud provenance uses `pipelineVersion:nuvia-gemini-json-4` and `modelVersion:gemini/<model>`;
+Clustering and forecasting use the same `generateContent` path. Clustering groups the
+authorized evidence texts semantically; the numeric embedding `vectors` parameter is
+deliberately not sent to the provider (it is not readable model context), while the strict
+partition validator still requires every supplied evidence ID exactly once across cluster
+members and noise. Forecasting must project exactly the supplied observations onto exactly
+the supplied futureDates, in order, with values and interval bounds inside the observed
+0–10 metric range; drifted dates, invented points or out-of-range values fail as
+`invalid_model_output`. These are contract checks only: semantic grouping quality and
+predictive accuracy are not established by them and require separate evaluation.
+
+Cloud provenance uses `pipelineVersion:nuvia-gemini-json-5` and `modelVersion:gemini/<model>`;
 embedding versions also include dimensions/normalization and `/b1024-v2` for this input
 policy and verified top-level REST shape. Local versions remain unchanged.
 Provider errors are bounded codes, without remote bodies, content, paths or keys. Rate limits

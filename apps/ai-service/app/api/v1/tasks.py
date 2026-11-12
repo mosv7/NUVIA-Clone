@@ -112,7 +112,7 @@ async def task(capability: str, request: TaskRequest):
     if cloud is not None:
         if capability in ("sentiment", "aspects") and not (request.text or "").strip():
             raise HTTPException(422, detail={"code": "text_required"})
-        if capability in ("assistant", "report") and not request.evidence:
+        if capability in ("assistant", "report", "clustering") and not request.evidence:
             raise HTTPException(422, detail={"code": "insufficient_evidence"})
         try:
             result = await execute_gemini(cloud, request)

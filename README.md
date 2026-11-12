@@ -342,9 +342,12 @@ Previews use illustrative data and do not create a real session or demonstrate c
 
 ## Model-ready Python service
 
-Optional online Gemini support can be selected explicitly while preserving all
-local model packages and adapters. The default remains local; no cloud fallback
-occurs. See [Gemini setup and switching](docs/development/gemini-ar.md).
+Optional online Gemini support can be selected explicitly to run every learned
+capability (sentiment, aspects, embeddings, clustering, forecasting, reports,
+assistant and survey drafts) while preserving all local model packages and
+adapters. Deterministic language/normalization stay local; the default provider
+remains local and no cloud fallback occurs. See
+[Gemini setup and switching](docs/development/gemini-ar.md).
 
 Use Python >=3.11 and uv 0.12.15:
 

@@ -72,11 +72,14 @@ bounded generation, hard timeout recovery and normal Node validation remain in
 place. No weights ship in Git. See the [shared Qwen guide](../../apps/ai-service/docs/shared-qwen.md).
 
 An explicit `AI_PROVIDER=gemini` selects the optional HTTPS provider inside
-FastAPI for supported text tasks and embeddings. Default `local` retains all
-existing model manifests/adapters. There is no implicit cloud fallback. Gemini
-credentials belong only to the AI service; the browser and Node public transport
-do not receive them. Existing output/evidence validation still applies. Local
-clustering/forecasting packages remain separate. Provider-specific model/pipeline
+FastAPI for every learned capability: text tasks, embeddings, semantic clustering and
+date-bounded forecasting. Default `local` retains all existing model manifests/adapters.
+There is no implicit cloud fallback. Gemini credentials belong only to the AI service;
+the browser and Node public transport do not receive them. Existing output/evidence
+validation still applies; clustering prompts use evidence text (parameter vectors are
+not sent) and forecasts must project exactly the supplied futureDates within the
+observed 0–10 metric range. Local clustering/forecasting packages remain available
+through the local provider selection. Provider-specific model/pipeline
 versions preserve provenance; clustering samples never combine different
 embedding models/pipelines, even when dimensions match. See the
 [online provider guide](../development/gemini-ar.md).

@@ -4,7 +4,7 @@ All capability/task routes require `X-AI-Service-Key`; no CORS access is enabled
 is public and exposes no package paths. Errors never echo input text, service keys or paths.
 
 `GET /api/v1/capabilities` returns schemaVersion, pipelineVersion (`nuvia-ai-1` for local,
-`nuvia-gemini-json-2` for explicit Gemini selection), a
+`nuvia-gemini-json-5` for explicit Gemini selection), a
 `capabilities` array and sanitized `configurationErrors`. Each entry has capability, status
 (`ready`, `unavailable`, `invalid`), available, optional modelVersion/reason/readiness.
 Entries identify their own provider and pipelineVersion: local/builtin entries retain
@@ -35,7 +35,7 @@ sentences are prepared deterministically. Evidence is `[{id,text}]`, scoped by N
 Success is `{schemaVersion:1,status:"succeeded",capability,modelVersion,pipelineVersion,result}`.
 Default deterministic modelVersion is `builtin-1`; normalization method is `unicode-arabic-v2`
 and script language method is `unicode-script-v1`. Learned output always names its model version.
-Gemini success also has `provider:"gemini"`, pipeline `nuvia-gemini-json-2` and version
+Gemini success also has `provider:"gemini"`, pipeline `nuvia-gemini-json-5` and version
 `gemini/<model>` (embedding versions append dimensions/normalization). Local manifests and
 result contracts are unchanged; see [optional Gemini configuration](../README.md#optional-online-gemini-provider).
 
@@ -59,7 +59,9 @@ exact raw quotations, valid offsets and manifest taxonomy/version membership.
 
 Embedding IDs exactly match input evidence IDs, or taskId for one text. Cluster membership
 partitions sources; citations belong to members. Forecast sampleCount equals input observations;
-dates/intervals are validated. Report/assistant citations reference exact authorized substrings;
+points project exactly the supplied futureDates in order, with values and interval bounds
+inside the observed 0–10 metric range. Report/assistant citations reference exact authorized
+substrings;
 every report section cites returned evidence. Node rechecks authorization, immutable snapshots
 and versions before persisting/displaying results.
 

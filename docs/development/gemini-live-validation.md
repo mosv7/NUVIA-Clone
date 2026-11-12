@@ -62,6 +62,17 @@ leaked into survey instructions. Pipeline `nuvia-gemini-json-4` scopes those
 examples to report generation and gives surveys task-specific title guidance;
 earlier pipeline-3 outputs retain their measured provenance.
 
+On 2026-11-11 the user approved extending selection so Gemini handles every
+learned capability. Pipeline `nuvia-gemini-json-5` adds clustering (semantic
+grouping of authorized evidence text; the numeric `vectors` parameter is not
+sent) and forecasting (exact projection of supplied futureDates within the
+observed 0–10 metric range), both validated by the same strict contracts in
+the service and Node. The 2026-10-25 statement above that clustering and
+forecasting remain local-package-only described that checkpoint and is
+superseded by this extension. These added capabilities are covered by
+mocked-transport regressions only; no live Google call has validated them yet,
+and no scientific acceptance is claimed. Local/Qwen paths remain intact.
+
 Ignored evidence is under `test-results/gemini-live/`: original failures,
 model-list metadata, controlled diagnostics, `flash-lite/summary.json`,
 `flash-lite/generation-fixed/summary.json`, `activation.json` and
